@@ -7,6 +7,12 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Remove="OptimizationConditions\**" />
+    <EmbeddedResource Remove="OptimizationConditions\**" />
+    <None Remove="OptimizationConditions\**" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="MathNet.Numerics" Version="5.0.0" />
   </ItemGroup>
 

@@ -26,8 +26,8 @@
         /// <returns> function minimum as double. </returns>
         public double Minimize1dFunction(Func<double, double> g, double r)
         {
-            var ab = _svenInterval(g, r);
-            return _goldenCut(g, ab.a, ab.b);
+            var (a, b) = SvenInterval(g, r);
+            return GoldenCut(g, a, b);
         }
 
         /// <summary>
@@ -37,8 +37,8 @@
         /// <param name="a"> Interval left bound. </param>
         /// <param name="b"> Interval right bound. </param>
         /// <returns></returns>
-        private double _goldenCut(Func<double, double> g,
-                                  double a, double b)
+        private double GoldenCut(Func<double, double> g,
+                                 double a, double b)
         {
             double l = b - a;
 
@@ -48,7 +48,7 @@
             double x2 = a + 0.618 * l;
 
             return g(x1) > g(x2) ?
-            _goldenCut(g, x1, b) : _goldenCut(g, a, x2);
+            GoldenCut(g, x1, b) : GoldenCut(g, a, x2);
         }
 
         /// <summary>
@@ -57,14 +57,14 @@
         /// <param name="f"> 1D function to calculate for. </param>
         /// <param name="x0"> Start point. </param>
         /// <returns> Sven interval. </returns>
-        private (double a, double b) _svenInterval(Func<double, double> f,
-                                                   double x0)
+        private (double a, double b) SvenInterval(Func<double, double> f,
+                                                  double x0)
         {
             // Selecting direction and calculating new delta
-            var dd = _selectDirectionUpdateDelta(f, x0, _initialSvenDelta);
+            var (direction, updatedDelta) = SelectDirectionUpdateDelta(f, x0, _initialSvenDelta);
 
             // Zero direction check
-            if (dd.direction == 0)
+            if (direction == 0)
             {
                 // Zero direction -> x0 - delta, x0 + delta contains min
                 return (x0 - _initialSvenDelta, x0 + _initialSvenDelta);
@@ -72,7 +72,7 @@
             else
             {
                 // Iterating in selected direction
-                return _svenIterate(f, x0, dd.direction * dd.updatedDelta);
+                return SvenIterate(f, x0, direction * updatedDelta);
             }
         }
 
@@ -84,8 +84,8 @@
         /// <param name="x0"> Start point. </param>
         /// <param name="d"> Delta of step. </param>
         /// <returns> Selected direction and (possibly) updated delta. </returns>
-        private (int direction, double updatedDelta) _selectDirectionUpdateDelta(Func<double, double> f,
-                                                                                 double x0, double d)
+        private (int direction, double updatedDelta) SelectDirectionUpdateDelta(Func<double, double> f,
+                                                                                double x0, double d)
         {
             // Interval
             var points = new double[3] { x0 - d, x0, x0 + d };
@@ -110,7 +110,7 @@
             else
             {
                 // Function is multi-modal on interval, try smaller interval.
-                return _selectDirectionUpdateDelta(f, x0, d / 2);
+                return SelectDirectionUpdateDelta(f, x0, d / 2);
             }
         }
 
@@ -121,8 +121,8 @@
         /// <param name="cborder"> Current bound. </param>
         /// <param name="step"> Current step. </param>
         /// <returns> Tuple - final interval. </returns>
-        private (double, double) _svenIterate(Func<double, double> f,
-                                              double cborder, double step)
+        private (double, double) SvenIterate(Func<double, double> f,
+                                             double cborder, double step)
         {
             // Calculating new border
             double nborder = cborder + step;
@@ -137,7 +137,7 @@
             else
             {
                 // No -> go further
-                return _svenIterate(f, nborder, step * 2);
+                return SvenIterate(f, nborder, step * 2);
             }
         }
 
