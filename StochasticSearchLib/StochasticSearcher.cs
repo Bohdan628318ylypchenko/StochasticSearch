@@ -29,35 +29,96 @@ namespace StochasticSearchLib
         /// Minimizes given function by Stochastic search.
         /// </summary>
         /// <param name="f"> Function to minimize </param>
-        /// <param name="directionGenerationAttemptBeforeRadiusDecrementCount"> Sets count of direction generation attempts
-        ///                                                                     to try finding min before lowering radius.
+        /// <param name="directionGenerationAttemptBeforeRadiusDecrementCount"> 
+        ///     Count of direction generation attempts to try finding min before lowering radius.
         /// </param>
         /// <param name="rMin"> Minimum search radius. </param>
         /// <param name="rInit"> Initial search radius. </param>
         /// <param name="rD"> Radius decrement coefficient: nR = cR * dR </param>
         /// <returns> Minimization path as array of tuples. A: point, B: function value in point. </returns>
-        public (Vector point, double f)[] MinimizeFunction(Func<Vector, double> f,
-                                                           Vector startPoint,
-                                                           double directionGenerationAttemptBeforeRadiusDecrementCount,
-                                                           double rMin, double rInit, double rD)
+        public Vector[] MinimizeFunction(Func<Vector, double> f,
+                                         Vector startPoint,
+                                         double directionGenerationAttemptBeforeRadiusDecrementCount,
+                                         double rMin, double rInit, double rD)
         {
-            LinkedList<(Vector point, double f)> result = new LinkedList<(Vector point, double f)>();
+            LinkedList<Vector> result = new();
+            result.AddLast(startPoint);
             var fStartPoint = f(startPoint);
-
-            result.AddLast((startPoint, fStartPoint));
             
-            _stochasticIteration(f,
-                                 result, startPoint, fStartPoint,
-                                 directionGenerationAttemptBeforeRadiusDecrementCount,
-                                 rMin, rInit, rD);
+            StochasticIteration(f,
+                                startPoint, fStartPoint,
+                                directionGenerationAttemptBeforeRadiusDecrementCount,
+                                rMin, rInit, rD,
+                                result);
 
             return result.ToArray();
         }
 
-        private void _stochasticIteration(Func<Vector, double> f,
-                                          LinkedList<(Vector point, double f)> acc, Vector p0, double fP0,
-                                          double directionGenerationAttemptBeforeRadiusDecrementCount,
-                                          double rMin, double r, double rD)
+        /// <summary>
+        /// Minimizes given function by Stochastic search in given bounds.
+        /// ff = f(x,y) + pD() * p(calc_d(x,y)) 
+        /// </summary>
+        /// <param name="f"> Function to minimize. </param>
+        /// <param name="bounds"> Bounds to search minimum in. At least 3 elements required. </param>
+        /// <param name="penalty"> Function - bounds penalty. </param>
+        /// <param name="penaltyCoefficients"> Array of penalty coefficients. </param>
+        /// <param name="directionGenerationAttemptBeforeRadiusDecrementCount"> 
+        ///     Count of direction generation attempts to try finding min before lowering radius.
+        /// </param>
+        /// <param name="rMin"> Minimum search radius. </param>
+        /// <param name="rInit"> Initial search radius. </param>
+        /// <param name="rD"> Radius decrement coefficient: nR = cR * dR </param>
+        /// <returns> Minimization path as array of tuples. A: point, B: function value in point. </returns>
+        public Vector[] MinimizeFunctionInBounds(Func<Vector, double> f,
+                                                 Vector[] bounds,
+                                                 Func<double, double> penalty, double[] penaltyCoefficients,
+                                                 Vector startPoint,
+                                                 double directionGenerationAttemptBeforeRadiusDecrementCount,
+                                                 double rMin, double rInit, double rD)
+        {
+            LinkedList<Vector> result = new();
+            result.AddLast(startPoint);
+
+            foreach (var currentPenaltyCoefficient in penaltyCoefficients)
+            {
+                Func<Vector, double> ff;
+                if (IsPointInBounds(result.Last.Value, bounds))
+                {
+                    ff = f;
+                }
+                else
+                {
+                    ff = v => f(v) + currentPenaltyCoefficient * penalty(DistanceToBounds(v, bounds));
+                }
+
+                StochasticIteration(ff,
+                                    result.Last.Value, ff(result.Last.Value),
+                                    directionGenerationAttemptBeforeRadiusDecrementCount,
+                                    rMin, rInit, rD,
+                                    result);
+            }
+
+            return result.ToArray();
+        }
+
+        /// <summary>
+        /// Runs recursive Stochastic iteration.
+        /// </summary>
+        /// <param name="f"> Function to minimize. </param>
+        /// <param name="v0"> Current point. </param>
+        /// <param name="fv0"> f(p0) </param>
+        /// <param name="directionGenerationAttemptBeforeRadiusDecrementCount"> 
+        ///     Count of direction generation attempts to try finding min before lowering radius.
+        /// </param>
+        /// <param name="rMin"> Minimum search radius. </param>
+        /// <param name="r"> Current search radius. </param>
+        /// <param name="rD"> Radius decrement coefficient: nR = cR * dR </param>
+        /// <param name="acc"> Linked list to save steps into. </param>
+        private void StochasticIteration(Func<Vector, double> f,
+                                         Vector v0, double fv0,
+                                         double directionGenerationAttemptBeforeRadiusDecrementCount,
+                                         double rMin, double r, double rD,
+                                         LinkedList<Vector> acc)
         {
             if (r <= rMin) 
             {
@@ -66,34 +127,125 @@ namespace StochasticSearchLib
 
             for (var i = 0; i < directionGenerationAttemptBeforeRadiusDecrementCount; i++)
             {
-                var direction = _generateDirection();
-                var g = D2ToD1LineFunctionConverter.Convert(f, p0, direction);
+                var direction = GenerateDirection();
+                var g = ConvertD2FuncToD1LineFunc(f, v0, direction);
 
                 var l = _searcher1D.Minimize1dFunction(g, r);
-                Vector p = (Vector)(p0 + DenseVector.OfArray(new double[] { l * Math.Cos(direction), l * Math.Sin(direction) }));
+                Vector v = VectorStepVectorSum(v0, l, direction);
 
-                var fP = f(p);
+                var fv = f(v);
 
-                if (fP < fP0)
+                if (fv < fv0)
                 {
-                    acc.AddLast((p, fP));
-                    _stochasticIteration(f,
-                                         acc, p, fP,
-                                         directionGenerationAttemptBeforeRadiusDecrementCount,
-                                         rMin, r, rD);
+                    acc.AddLast(v);
+                    StochasticIteration(f,
+                                        v, fv,
+                                        directionGenerationAttemptBeforeRadiusDecrementCount,
+                                        rMin, r, rD,
+                                        acc);
                     return;
                 }
             }
 
-            _stochasticIteration(f,
-                                 acc, p0, fP0,
-                                 directionGenerationAttemptBeforeRadiusDecrementCount,
-                                 rMin, r * rD, rD);
+            StochasticIteration(f,
+                                v0, fv0,
+                                directionGenerationAttemptBeforeRadiusDecrementCount,
+                                rMin, r * rD, rD,
+                                acc);
         }
 
-        private double _generateDirection()
+        /// <summary>
+        /// Checks if point is in bounds.
+        /// </summary>
+        /// <param name="v"> Point - candidate. </param>
+        /// <param name="bounds"> Bounds as array of pikes. </param>
+        /// <returns> true if in bounds, else false. </returns>
+        private bool IsPointInBounds(Vector v, Vector[] bounds)
+        {
+            bool result = false;
+            int j = bounds.Length - 1;
+            for (int i = 0; i < bounds.Length; i++)
+            {
+                if (bounds[i][1] < v[1] && bounds[j][1] >= v[1] || 
+                    bounds[j][1] < v[1] && bounds[i][1] >= v[1])
+                {
+                    if (bounds[i][0] + (v[1] - bounds[i][1]) /
+                       (bounds[j][1] - bounds[i][1]) *
+                       (bounds[j][0] - bounds[i][0]) < v[0])
+                    {
+                        result = !result;
+                    }
+                }
+                j = i;
+            }
+            return result;
+        }
+
+        /// <summary>
+        /// Calculates distance from point to polygon, represented by bounds.
+        /// </summary>
+        /// <param name="v"> Point. </param>
+        /// <param name="bounds"> Polygon as array of pikes. </param>
+        /// <returns> Distance from point to polygon. </returns>
+        private double DistanceToBounds(Vector v, Vector[] bounds)
+        {
+            double[] distances = new double[bounds.Length];
+            for (var i = 0; i < bounds.Length; i++)
+            {
+                var currentSegment = bounds[(i + 1) % bounds.Length] - bounds[i];
+                var currentSegmentLength = currentSegment.L2Norm();
+                var v1 = v - bounds[i];
+                var v2 = v - bounds[(i + 1) % bounds.Length];
+                var r = currentSegment.DotProduct(v - bounds[i]);
+                r /= Math.Pow(currentSegmentLength, 2);
+                if (r < 0)
+                {
+                    distances[i] = v1.L2Norm();
+                }
+                else if (r > 1)
+                {
+                    distances[i] = v2.L2Norm();
+                }
+                else
+                {
+                    distances[i] = Math.Sqrt(Math.Pow(v1.L2Norm(), 2) - Math.Pow(r * currentSegmentLength, 2));
+                }
+            }
+
+            return distances.Min();
+        }
+
+        /// <summary>
+        /// Generates random direction as angle [0; 2PI]
+        /// </summary>
+        private double GenerateDirection()
         {
             return _random.NextDouble() * Math.PI * 2.0;
+        }
+
+        /// <summary>
+        /// Converts given 2d function into 1d line-directed function.
+        /// </summary>
+        /// <param name="f"> Original 2d function. </param>
+        /// <param name="v0"> Point to pass line though. </param>
+        /// <param name="a"> Line angle. </param>
+        /// <returns> 1d line-directed function.  </returns>
+        private Func<double, double> ConvertD2FuncToD1LineFunc(Func<Vector, double> f,
+                                                               Vector v0, double a)
+        {
+            return r => f(VectorStepVectorSum(v0, r, a));
+        }
+
+        /// <summary>
+        /// Calculates new vector as: p + r * (cos(a), sin(a))
+        /// </summary>
+        /// <param name="v"> Vector to add step to. </param>
+        /// <param name="r"> Step vector length. </param>
+        /// <param name="a"> Direction as angle from [0, 2PI]. </param>
+        /// <returns></returns>
+        private Vector VectorStepVectorSum(Vector v, double r, double a)
+        {
+            return (Vector)(v + DenseVector.OfArray(new double[] { r * Math.Cos(a), r * Math.Sin(a) }));
         }
     }
 }
