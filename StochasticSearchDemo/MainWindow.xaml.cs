@@ -7,7 +7,6 @@ using StochasticSearchLib.Optimization1D;
 using Microsoft.CodeAnalysis.Scripting;
 using Microsoft.CodeAnalysis.CSharp.Scripting;
 using System.Windows.Input;
-using ScottPlot;
 
 namespace StochasticSearchDemo
 {
@@ -24,14 +23,14 @@ namespace StochasticSearchDemo
             InitializeComponent();
         }
 
-        public Func<double, double, double> CreateFunctionXYFromString(string fSrc)
+        private Func<double, double, double> CreateFunctionXYFromString(string fSrc)
         {
             var str = "(x, y) => " + fSrc;
             var options = ScriptOptions.Default.AddImports(new string[] { "System" });
             return CSharpScript.EvaluateAsync<Func<double, double, double>>(str, options).Result;
         }
 
-        public Func<T, double> CreateFunctionXFromString<T>(string fSrc)
+        private Func<T, double> CreateFunctionXFromString<T>(string fSrc)
         {
             var str = "(x) => " + fSrc;
             var options = ScriptOptions.Default.AddImports(new string[] { "System" });
@@ -44,7 +43,7 @@ namespace StochasticSearchDemo
 
             Plot.Plot.Clear();
 
-            Func<MathNet.Numerics.LinearAlgebra.Double.Vector, double> f;
+            Func<MathNet.Numerics.LinearAlgebra.Double.Vector, double> f = null;
             MathNet.Numerics.LinearAlgebra.Double.Vector x0;
             ISearcher1D searcher1D;
             double goldenCutEpsilon, goldenCutSvenDelta;
@@ -55,7 +54,7 @@ namespace StochasticSearchDemo
             int penaltyCoefCount;
             Func<int, double> penaltyCoefFunction;
             double[] penaltyCoefficients;
-            MathNet.Numerics.LinearAlgebra.Double.Vector[] bounds;
+            MathNet.Numerics.LinearAlgebra.Double.Vector[] bounds = null;
             StochasticSearcher stochasticSearcher;
             MathNet.Numerics.LinearAlgebra.Double.Vector[] result;
             try
@@ -120,6 +119,35 @@ namespace StochasticSearchDemo
                 double[] rY = result.Select(v => v[1]).ToArray();
 
                 ResultTextBox.Text = "";
+                ResultTextBox.Text += "Function: " + FunctionTextBox.Text + "\n";
+                ResultTextBox.Text += "Start point: " + StartPointTextBox.Text + "\n";
+                if (_isGoldenCut)
+                {
+                    ResultTextBox.Text += "1D: golden cut" + "\n";
+                    ResultTextBox.Text += "    Epsilon: " + GCEpsilonTextBox.Text + "\n";
+                    ResultTextBox.Text += "    Sven Delta: " + GCSvenDeltaTextBox.Text + "\n";
+                }
+                else
+                {
+                    ResultTextBox.Text += "1D: naive" + "\n";
+                }
+                ResultTextBox.Text += "Seed: " + SeedTextBox.Text + "\n";
+                ResultTextBox.Text += "Direction generation attempt before radius decrement count: " + DGACountTextBox.Text + "\n";
+                ResultTextBox.Text += "Minimum radius: " + RMinTextBox.Text + "\n";
+                ResultTextBox.Text += "Initial radius: " + RInitTextBox.Text + "\n";
+                ResultTextBox.Text += "Radius decrement: " + RdTextBox.Text + "\n";
+                if (_isBounded)
+                {
+                    ResultTextBox.Text += "Bounds: true" + "\n";
+                    ResultTextBox.Text += "Penalty function: " + PenaltyTextBox.Text + "\n";
+                    ResultTextBox.Text += "Penalty coef count: " + PenaltyCoefCountTextBox.Text + "\n";
+                    ResultTextBox.Text += "Penalty coef function: " + PenaltyCoefFunctionTextBox.Text + "\n";
+                    foreach (var b in bounds)
+                    {
+                        ResultTextBox.Text += b[0] + " " + b[1] + "\n";
+                    }
+                }
+                ResultTextBox.Text += "\n=========================================\n";
                 for (var i = 0; i < result.Length; i++)
                 {
                     ResultTextBox.Text += rX[i] + " " + rY[i] + '\n';
@@ -138,7 +166,7 @@ namespace StochasticSearchDemo
                 MessageBox.Show("Invalid input!", "Oops!");
             }
 
-            Mouse.OverrideCursor = null; 
+            Mouse.OverrideCursor = null;
         }
 
         private void GoldenCutRadioButton_Click(object sender, RoutedEventArgs e)
