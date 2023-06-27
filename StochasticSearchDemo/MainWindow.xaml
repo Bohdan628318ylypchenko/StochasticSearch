@@ -59,7 +59,7 @@
         <TabItem Header="Output">
             <Grid Background="#FFE5E5E5">
                 <ScrollViewer>
-                    <TextBlock Name="ResultTextBox" Text="Minimization output will be displayed here" FontFamily="Calibri" FontSize="18"/>
+                    <TextBox Name="ResultTextBox" Text="Minimization output will be displayed here" FontFamily="Calibri" FontSize="18" IsReadOnly="True"/>
                 </ScrollViewer>
             </Grid>
         </TabItem>
